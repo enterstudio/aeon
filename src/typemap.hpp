@@ -1,5 +1,5 @@
 /*
- Copyright 2016 Nervana Systems Inc.
+ Copyright 2016-2017 Nervana Systems Inc.
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
  You may obtain a copy of the License at
@@ -17,6 +17,7 @@
 
 #include <map>
 #include <opencv2/core/core.hpp>
+#include "json.hpp"
 
 #ifdef PYTHON_FOUND
 #include <Python.h>
@@ -75,21 +76,51 @@ public:
     {
         return all_outputs.find(s) != all_outputs.end();
     }
+
+    bool operator==(const output_type& other) const
+    {
+        return (m_size == other.m_size && m_cv_type == other.m_cv_type &&
+                m_np_type == other.m_np_type && m_tp_name == other.m_tp_name);
+    }
+
+    bool operator!=(const output_type& other) const { return !(*this == other); }
+    friend void to_json(nlohmann::json& out, const nervana::output_type& obj)
+    {
+        out[m_tp_name_json_name] = obj.m_tp_name;
+        out[m_np_type_json_name] = obj.m_np_type;
+        out[m_cv_type_json_name] = obj.m_cv_type;
+        out[m_size_json_name]    = obj.m_size;
+    }
+
+    friend void from_json(const nlohmann::json& js, nervana::output_type& obj)
+    {
+        obj.m_tp_name = js[m_tp_name_json_name];
+        obj.m_np_type = js[m_np_type_json_name];
+        obj.m_cv_type = js[m_cv_type_json_name];
+        obj.m_size    = js[m_size_json_name];
+    }
+
     std::string m_tp_name;
     int         m_np_type;
     int         m_cv_type;
     size_t      m_size;
+
+private:
+
+    // These are field names for json serialization
+    static const std::string m_tp_name_json_name;
+    static const std::string m_np_type_json_name;
+    static const std::string m_cv_type_json_name;
+    static const std::string m_size_json_name;
 };
 
 class nervana::shape_type
 {
 public:
-    shape_type(const std::vector<size_t>& shape,
-               const output_type&         otype,
-               const bool                 flatten = false)
+    shape_type() {}
+    shape_type(const std::vector<size_t>& shape, const output_type& otype)
         : m_shape{shape}
         , m_otype{otype}
-        , m_flatten_with_batch_size{flatten}
     {
         m_byte_size = static_cast<size_t>(m_otype.get_size() * get_element_count());
     }
@@ -101,13 +132,12 @@ public:
     size_t                     get_byte_size() const { return m_byte_size; }
     const std::vector<size_t>& get_shape() const { return m_shape; }
     const output_type&         get_otype() const { return m_otype; }
-    bool                       flatten_all_dims() const { return m_flatten_with_batch_size; }
-
     void set_names(const std::vector<std::string>& names)
     {
         if (m_shape.size() != names.size())
         {
-            throw std::runtime_error("naming shape dimensions: number of names does not match number of dimensions");
+            throw std::runtime_error(
+                "naming shape dimensions: number of names does not match number of dimensions");
         }
         else
         {
@@ -120,7 +150,7 @@ public:
         if (m_names.size() == 0)
         {
             std::vector<std::string> res;
-            for (int i=0; i < m_shape.size(); ++i)
+            for (int i = 0; i < m_shape.size(); ++i)
             {
                 res.push_back(std::to_string(i));
             }
@@ -132,10 +162,48 @@ public:
         }
     }
 
+    bool operator==(const shape_type& other) const
+    {
+        return (m_byte_size == other.m_byte_size && m_otype == other.m_otype &&
+                m_shape == other.m_shape && m_names == other.m_names);
+    }
+
+    bool operator!=(const shape_type& other) const { return !(*this == other); }
+    friend void to_json(nlohmann::json& out, const nervana::shape_type& obj)
+    {
+        out[m_shape_json_name]     = obj.m_shape;
+        out[m_otype_json_name]     = obj.m_otype;
+        out[m_byte_size_json_name] = obj.m_byte_size;
+        out[m_names_json_name]     = obj.m_names;
+    }
+
+    friend void from_json(const nlohmann::json& js, nervana::shape_type& obj)
+    {
+        obj.m_otype     = js[m_otype_json_name];
+        obj.m_byte_size = js[m_byte_size_json_name];
+
+        auto shape_elements = js[m_shape_json_name];
+        for (size_t shape_element : shape_elements)
+        {
+            obj.m_shape.push_back(shape_element);
+        }
+
+        auto names = js[m_names_json_name];
+        for (std::string name : names)
+        {
+            obj.m_names.push_back(name);
+        }
+    }
+
 private:
-    std::vector<size_t> m_shape;
-    output_type         m_otype;
-    size_t              m_byte_size;
-    bool                m_flatten_with_batch_size;
+    std::vector<size_t>      m_shape;
+    output_type              m_otype;
+    size_t                   m_byte_size;
     std::vector<std::string> m_names;
+
+    // These are field names for json serialization
+    static const std::string m_shape_json_name;
+    static const std::string m_otype_json_name;
+    static const std::string m_byte_size_json_name;
+    static const std::string m_names_json_name;
 };

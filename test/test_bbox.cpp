@@ -101,8 +101,8 @@ cv::Mat
 shared_ptr<augment::image::params> make_params(int width, int height)
 {
     shared_ptr<augment::image::params> iparam = make_shared<augment::image::params>();
-    iparam->cropbox                  = cv::Rect(0, 0, width, height);
-    iparam->output_size              = cv::Size(width, height);
+    iparam->cropbox                           = cv::Rect(0, 0, width, height);
+    iparam->output_size                       = cv::Size(width, height);
     return iparam;
 }
 
@@ -150,6 +150,17 @@ TEST(boundingbox, extractor)
         EXPECT_FALSE(b.difficult);
         EXPECT_FALSE(b.truncated);
         EXPECT_EQ(0, b.label);
+
+        auto c = b * 2.0;
+        EXPECT_EQ(b.xmax * 2.0, c.xmax);
+
+        cv::Size2i ref(500, 375);
+        EXPECT_EQ(ref, decoded->image_size());
+
+        EXPECT_EQ(3, decoded->depth());
+        std::stringstream ss;
+        ss << b;
+        EXPECT_EQ(ss.str(), "[41 x 206 from (324, 109)] label=0");
     }
     {
         string                 data = read_file(CURDIR "/test_data/009952.json");
@@ -160,6 +171,14 @@ TEST(boundingbox, extractor)
         auto boxes = decoded->boxes();
         ASSERT_EQ(1, boxes.size());
     }
+}
+
+TEST(boundingbox, operator_mult)
+{
+    nervana::box a(1.0, 2.0, 3.0, 4.0);
+    auto b = a * 4.0;
+    EXPECT_EQ(4, b.x());
+    EXPECT_EQ(8, b.y());
 }
 
 TEST(boundingbox, extractor_error)
@@ -203,9 +222,9 @@ TEST(boundingbox, bbox)
     EXPECT_EQ(8, boxes[1].label);
     EXPECT_EQ(7, boxes[2].label);
 
-    boundingbox::transformer  transform(cfg);
+    boundingbox::transformer           transform(cfg);
     shared_ptr<augment::image::params> iparam = make_params(256, 256);
-    auto                      tx     = transform.transform(iparam, decoded);
+    auto                               tx     = transform.transform(iparam, decoded);
 }
 
 TEST(boundingbox, crop)
@@ -240,9 +259,9 @@ TEST(boundingbox, crop)
 
     ASSERT_EQ(8, boxes.size());
 
-    boundingbox::transformer  transform(cfg);
+    boundingbox::transformer           transform(cfg);
     shared_ptr<augment::image::params> iparam = make_params(256, 256);
-    iparam->cropbox                  = cv::Rect(35, 35, 40, 40);
+    iparam->cropbox                           = cv::Rect(35, 35, 40, 40);
 
     auto d = draw(256, 256, decoded->boxes(), iparam->cropbox);
     cv::imwrite("bbox_crop.png", d);
@@ -297,13 +316,13 @@ TEST(boundingbox, rescale)
 
     ASSERT_EQ(8, boxes.size());
 
-    boundingbox::transformer  transform(cfg);
-    shared_ptr<augment::image::params> iparam    = make_params(256, 256);
-    iparam->output_size                 = cv::Size(512, 1024);
-    auto                     tx_decoded = transform.transform(iparam, decoded);
-    vector<boundingbox::box> tx_boxes   = tx_decoded->boxes();
-    float                    xscale     = 512. / 256.;
-    float                    yscale     = 1024. / 256.;
+    boundingbox::transformer           transform(cfg);
+    shared_ptr<augment::image::params> iparam = make_params(256, 256);
+    iparam->output_size                       = cv::Size(512, 1024);
+    auto                     tx_decoded       = transform.transform(iparam, decoded);
+    vector<boundingbox::box> tx_boxes         = tx_decoded->boxes();
+    float                    xscale           = 512. / 256.;
+    float                    yscale           = 1024. / 256.;
     ASSERT_EQ(8, tx_boxes.size());
     EXPECT_EQ(cv::Rect(10 * xscale, 10 * yscale, 10 * xscale, 10 * yscale), tx_boxes[0].rect());
     EXPECT_EQ(cv::Rect(30 * xscale, 30 * yscale, 10 * xscale, 10 * yscale), tx_boxes[1].rect());
@@ -346,11 +365,11 @@ TEST(boundingbox, flip)
 
     ASSERT_EQ(8, boxes.size());
 
-    boundingbox::transformer  transform(cfg);
-    shared_ptr<augment::image::params> iparam    = make_params(256, 256);
-    iparam->flip                        = 1;
-    auto                     tx_decoded = transform.transform(iparam, decoded);
-    vector<boundingbox::box> tx_boxes   = tx_decoded->boxes();
+    boundingbox::transformer           transform(cfg);
+    shared_ptr<augment::image::params> iparam = make_params(256, 256);
+    iparam->flip                              = 1;
+    auto                     tx_decoded       = transform.transform(iparam, decoded);
+    vector<boundingbox::box> tx_boxes         = tx_decoded->boxes();
     ASSERT_EQ(8, tx_boxes.size());
 
     EXPECT_EQ(cv::Rect(256 - 10 - 10 - 1, 10, 10, 10), tx_boxes[0].rect());
@@ -394,13 +413,13 @@ TEST(boundingbox, crop_flip)
 
     ASSERT_EQ(8, boxes.size());
 
-    boundingbox::transformer  transform(cfg);
-    shared_ptr<augment::image::params> iparam    = make_params(256, 256);
-    iparam->cropbox                     = cv::Rect(35, 35, 40, 40);
-    iparam->output_size                 = cv::Size(256, 256);
-    iparam->flip                        = 1;
-    auto                     tx_decoded = transform.transform(iparam, decoded);
-    vector<boundingbox::box> tx_boxes   = tx_decoded->boxes();
+    boundingbox::transformer           transform(cfg);
+    shared_ptr<augment::image::params> iparam = make_params(256, 256);
+    iparam->cropbox                           = cv::Rect(35, 35, 40, 40);
+    iparam->output_size                       = cv::Size(256, 256);
+    iparam->flip                              = 1;
+    auto                     tx_decoded       = transform.transform(iparam, decoded);
+    vector<boundingbox::box> tx_boxes         = tx_decoded->boxes();
     ASSERT_EQ(6, tx_boxes.size());
 
     float xscale = 256. / 40.;
@@ -430,10 +449,10 @@ TEST(boundingbox, angle)
 
     ASSERT_EQ(1, boxes.size());
 
-    boundingbox::transformer  transform(cfg);
+    boundingbox::transformer           transform(cfg);
     shared_ptr<augment::image::params> iparam = make_params(256, 256);
-    iparam->angle                    = 5;
-    auto tx_decoded                  = transform.transform(iparam, decoded);
+    iparam->angle                             = 5;
+    auto tx_decoded                           = transform.transform(iparam, decoded);
     EXPECT_EQ(nullptr, tx_decoded.get());
 }
 

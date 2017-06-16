@@ -38,7 +38,7 @@ Data format
 As mentioned above, users interact with the dataloader by providing two items:
 
 1. Manifest file, a tab-separated file (*.tsv).
-2. Configuration parameters, as a python dictionary.
+2. Configuration parameters, as a ``json`` structure.
 
 Operations such as generating training/testing splits, or balancing labels for imbalanced datasets should be implemented outside of the dataloader by the user during **ingest** to create the appropriate manifest files. Several example ingest scripts are in the neon repository.
 
@@ -56,11 +56,11 @@ Elements in the header are one of FILE, BINARY, STRING, ASCII_INT, or ASCII_FLOA
 
 FILE
 ~~~~
-An absolute or relative path. Relative paths work in conjunction with the *manifest_root* keyword.
+An absolute or relative path. Relative paths work in conjunction with the *manifest_root* keyword.  The contents of the file are interpreted
 
 BINARY
 ~~~~~~
-Base64 encoded text.
+Base64 encoded text.  Useful for including images inline with the manifest file.
 
 STRING
 ~~~~~~
@@ -80,10 +80,10 @@ A comment is a line that starts with the '#' character
 
 Record
 ^^^^^^
-A record is any non-blank line that is not a header or comment.
+A record is any non-blank line that is not a header or comment.  All records in the manifest must have the same number of elements.
 
 .. code-block:: bash
-    
+
     <record_1_element_1>[tab]<record_1_element_2>
     <record_2_element_1>[tab]<record_2_element_2>
     ...
@@ -104,7 +104,7 @@ In the image classification case,
     ...
     /image_dir/vehicles/toyota.jpg[tab]3
 
-Note that above, the target labels should be text files with a single label.
+Note that above, the target labels are simply numerical indexes that correspond to a categorical label.
 
 For audio transcription, paths to target transcriptions are included:
 
@@ -120,17 +120,30 @@ For example formats of different modalities and problems, see the image, audio, 
 Configuration
 -------------
 
-The dataloader configuration consists of a base loader config, then individual configs for the different modalities. These configs are captured by a python dictionary. For example,
+The dataloader configuration consists of a base loader configuration, then individual configurations for the different modalities. These configurations are captured by a json structure, which can be created via a dictionary in python. For example,
 
 .. code-block:: python
 
-    image_config = dict(type="image", height=224, width=224)
-    label_config = dict(type="label", binary=True)
-    augmentation_config = dict(type="image", flip_enable=True)
-    config = dict(etl=(image_config, label_config),
-                  augment=(augmentation_config),
-                  manifest_filename='train.csv',
-                  minibatch_size=128)
+    import json
+    from aeon import DataLoader
+
+    image_config =        {"type": "image",
+                           "height": 224,
+                           "width": 224}
+
+    label_config =        {"type": "label",
+                           "binary": True}
+
+    augmentation_config = {"type": "image",
+                           "flip_enable": True}
+
+    aeon_config =         {"manifest_filename": "train.tsv",
+                           "etl": (image_config, label_config),
+                           "augment": (augmentation_config),
+                           "batch_size": 128}
+
+    train_set = DataLoader(json.dumps(aeon_config))
+
 
 Importantly, the ``type`` key indicates to the dataloader which input data type to expect, and the ``image`` and ``label`` keys correspond to additional configuration dictionaries. The dataloader currently supports:
 
@@ -164,7 +177,7 @@ The possible base loader configurations are the following (configurations withou
    manifest_filename (string)| *Required* | Path to the manifest file.
    manifest_root (string)| ~"~" |
    batch_size (int)| *Required* | Batch size. In neon, typically accesible via ``be.bsz``.
-   manifest_root (string) | ~"~" | If provided, ``manifest_root`` is prepended to all manifest items with relative paths, while manifest items with absolute paths are left untouched. 
+   manifest_root (string) | ~"~" | If provided, ``manifest_root`` is prepended to all manifest items with relative paths, while manifest items with absolute paths are left untouched.
    cache_directory (string)| ~"~" | If provided, the dataloader will cache the data into ``*.cpio`` files for fast disk reads.
    subset_fraction (float)| 1.0 | Fraction of the dataset to iterate over. Useful when testing code on smaller data samples.
    shuffle_enable (bool) | False | Shuffles the dataset order for every epoch
@@ -172,7 +185,7 @@ The possible base loader configurations are the following (configurations withou
    single_thread (bool)| False | Execute on a single thread
    pinned (bool)| False |
    random_seed (int)| 0 | Set the random seed.
-   iteration_mode||
+   iteration_mode (string)|"ONCE"| Can be "ONCE", "COUNT", or "INFINITE"
    iteration_mode_count||
    etl||
    augmentation||
@@ -184,22 +197,29 @@ While aeon can be used within a purely C++ environment, we have included a pytho
 
 .. code-block:: python
 
-    image_config = dict(type="image", height=224, width=224)
-    label_config = dict(type="label", binary=True)
-    augmentation_config = dict(type="image", flip_enable=True)
-    config = dict(etl=(image_config, label_config),
-                  augment=(augmentation_config),
-                  manifest_filename='train.csv',
-                  minibatch_size=128)
+    image_config =        {"type": "image",
+                           "height": 224,
+                           "width": 224}
+
+    label_config =        {"type": "label",
+                           "binary": True}
+
+    augmentation_config = {"type": "image",
+                           "flip_enable": True}
+
+    aeon_config = {"manifest_filename": "train.tsv",
+                   "etl": (image_config, label_config),
+                   "augment": (augmentation_config),
+                   "batch_size": 128}
+
 
 The above configuration will, for each image, take a random crop of 224x224 pixels, and perform a horizontal flip with probability 0.5. We then generate our dataloader:
 
 .. code-block:: python
 
+    import json
     from aeon import DataLoader
-    from neon.backends import gen_backend
 
-    be = gen_backend(backend='gpu')
-    train = DataLoader(config, backend)
+    train_set = DataLoader(json.dumps(aeon_config))
 
 The backend argument above from neon tells the dataloader where to place the buffers to provision to the model.

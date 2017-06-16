@@ -64,6 +64,14 @@ public:
     void add_exception(std::exception_ptr e) { m_exception = e; }
     variable_record_field_list::iterator  begin() { return m_elements.begin(); }
     variable_record_field_list::iterator  end() { return m_elements.end(); }
+
+    void rethrow_if_exception() const
+    {
+        if (m_exception != nullptr)
+        {
+            std::rethrow_exception(m_exception);
+        }
+    }
 private:
     variable_record_field_list m_elements;
     std::exception_ptr         m_exception;
@@ -75,20 +83,14 @@ public:
     encoded_record& record(size_t index)
     {
         encoded_record& rc = m_records[index];
-        if (rc.m_exception != nullptr)
-        {
-            std::rethrow_exception(rc.m_exception);
-        }
+        rc.rethrow_if_exception();
         return rc;
     }
 
     const encoded_record& record(size_t index) const
     {
         const encoded_record& rc = m_records[index];
-        if (rc.m_exception != nullptr)
-        {
-            std::rethrow_exception(rc.m_exception);
-        }
+        rc.rethrow_if_exception();
         return rc;
     }
 
@@ -159,7 +161,7 @@ public:
     virtual void allocate();
     const char* get_item(size_t index) const;
     char* get_item(size_t index);
-    cv::Mat get_item_as_mat(size_t index, bool channel_major=false) const;
+    cv::Mat get_item_as_mat(size_t index, bool channel_major = false) const;
     char*             data() const { return m_data; }
     size_t            get_item_count() const { return m_size / m_stride; }
     size_t            size() const { return m_size; }
@@ -183,16 +185,18 @@ public:
                      size_t batch_size,
                      bool   pinned = false)
     {
-        for (auto sz : write_sizes)
-        {
-            add_item(sz.first, sz.second, batch_size, pinned);
-        }
+        add_items(write_sizes, batch_size, pinned);
     }
 
-    // explicit fixed_buffer_map(const fixed_buffer_map& rhs)
-    // {
-
-    // }
+    void add_items(const std::map<std::string, shape_type>& write_sizes,
+                     size_t batch_size,
+                     bool   pinned = false)
+    {
+         for (auto sz : write_sizes)
+         {
+             add_item(sz.first, sz.second, batch_size, pinned);
+         }
+     }
 
     void add_item(const std::string& name,
                   const shape_type&  shp_tp,

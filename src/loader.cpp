@@ -89,13 +89,16 @@ loader::loader(nlohmann::json& config_json)
 
 loader::~loader()
 {
-    debug_web_app.deregister_loader(this);
+    if (m_debug_web_app)
+    {
+        m_debug_web_app->deregister_loader(this);
+    }
 }
 
 void loader::initialize(nlohmann::json& config_json)
 {
-    string        config_string = config_json.dump();
-    m_current_config = config_json;
+    string config_string = config_json.dump();
+    m_current_config     = config_json;
     loader_config lcfg(config_json);
     m_batch_size = lcfg.batch_size;
 
@@ -115,11 +118,11 @@ void loader::initialize(nlohmann::json& config_json)
     m_batch_count_value = (m_manifest->record_count() + m_batch_size - 1) / m_batch_size;
     if (lcfg.iteration_mode == "ONCE")
     {
-        m_batch_mode        = BatchMode::ONCE;
+        m_batch_mode = BatchMode::ONCE;
     }
     else if (lcfg.iteration_mode == "INFINITE")
     {
-        m_batch_mode        = BatchMode::INFINITE;
+        m_batch_mode = BatchMode::INFINITE;
     }
     else if (lcfg.iteration_mode == "COUNT")
     {
@@ -138,13 +141,19 @@ void loader::initialize(nlohmann::json& config_json)
 
     m_decoder = make_shared<batch_decoder>(m_batch_iterator.get(),
                                            static_cast<size_t>(lcfg.batch_size),
-                                           lcfg.single_thread,
+                                           lcfg.decode_thread_count,
                                            lcfg.pinned,
                                            m_provider);
 
     m_output_buffer_ptr = m_decoder->next();
 
-    debug_web_app.register_loader(this);
+    if (lcfg.web_server_port != 0)
+    {
+        m_debug_web_app = make_shared<web_app>(lcfg.web_server_port);
+        m_debug_web_app->register_loader(this);
+    }
+
+    m_current_iter.m_empty_buffer.add_items(get_names_and_shapes(), (size_t)batch_size());
 }
 
 const vector<string>& loader::get_buffer_names() const
@@ -207,7 +216,18 @@ bool loader::iterator::positional_end() const
 
 const fixed_buffer_map& loader::iterator::operator*() const
 {
-    return *(m_current_loader.m_output_buffer_ptr);
+    const fixed_buffer_map* rc = nullptr;
+
+    if (m_current_loader.m_output_buffer_ptr)
+    {
+        rc = m_current_loader.m_output_buffer_ptr;
+    }
+    else
+    {
+       rc = &m_empty_buffer;
+    }
+
+    return *rc;
 }
 
 void loader::increment_position()

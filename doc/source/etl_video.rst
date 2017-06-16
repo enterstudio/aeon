@@ -1,5 +1,5 @@
 .. ---------------------------------------------------------------------------
-.. Copyright 2015 Nervana Systems Inc.
+.. Copyright 2015-2017 Nervana Systems Inc.
 .. Licensed under the Apache License, Version 2.0 (the "License");
 .. you may not use this file except in compliance with the License.
 .. You may obtain a copy of the License at
@@ -46,13 +46,13 @@ Splitting the videos into equal length segments as we did here is not necessary
 in general for the aeon ``DataLoader``, but is helpful for training this
 particular model in neon.
 
-Once preprocessing is complete, a sample manifest CSV file must be created with
+Once preprocessing is complete, a sample manifest tab-separated values (TSV) file must be created with
 the absolute paths of the videos and the classification labels. For example::
 
-  /video_dir/video1_location.avi,/labels/target_1.txt
-  /video_dir/video2_location.avi,/labels/target_1.txt
-  /video_dir/video3_location.avi,/labels/target_4.txt
-  /video_dir/video4_location.avi,/labels/target_2.txt
+  /video_dir/video1_location.avi    /labels/target_1.txt
+  /video_dir/video2_location.avi    /labels/target_1.txt
+  /video_dir/video3_location.avi    /labels/target_4.txt
+  /video_dir/video4_location.avi    /labels/target_2.txt
 
 Where the first column contains absolute paths to the preprocessed MJPEG videos
 and the second column contains absolute paths to label files. The label files
@@ -72,7 +72,7 @@ appropriate entry for video options:
                                    'scale': [0.875, 0.875]}},
                   label={'binary': False},
                   manifest_filename='train.csv',
-                  minibatch_size=128)
+                  batch_size=128)
 
 The two current possible options for video configuration are:
 
@@ -90,15 +90,11 @@ set of transforms to apply to the input data.
 
 .. code-block:: python
 
-    from neon.data.dataloader_transformers import OneHot, TypeCast
+    import json
     from aeon import DataLoader
     # config is defined in the code above
-    model = ... # neon.models.Model object
-    dl = DataLoader(config, model.be)
-    dl = OneHot(dl, index=1, nclasses=101)
-    dl = TypeCast(dl, index=0, dtype=np.float32)
-    # ...
-    model.fit(dl, optimizer=opt, num_epochs=args.epochs, cost=cost, callbacks=callbacks)
+    dl = DataLoader(json.dumps(config))
+
 
 Again, for the full example consult the complete `neon C3D example`_ in the
 neon repository.

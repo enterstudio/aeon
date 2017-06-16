@@ -42,7 +42,6 @@ public:
     virtual ~block_loader_file() { finalize(); }
     encoded_record_list* filler() override;
 
-    void                 reset() override { m_manifest.reset(); }
     size_t               block_count() const override { return m_manifest.block_count(); }
     size_t               record_count() const override { return m_manifest.record_count(); }
     size_t               block_size() const override { return 1; }
@@ -55,12 +54,14 @@ public:
 
     async_state get_state() const override
     {
-        return async_manager<std::vector<std::vector<std::string>>, encoded_record_list>::get_state();
+        return async_manager<std::vector<std::vector<std::string>>,
+                             encoded_record_list>::get_state();
     }
 
     const std::string& get_name() const override
     {
-        return async_manager<std::vector<std::vector<std::string>>, encoded_record_list>::get_name();
+        return async_manager<std::vector<std::vector<std::string>>,
+                             encoded_record_list>::get_name();
     }
 
 private:

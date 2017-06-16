@@ -1,5 +1,5 @@
 .. ---------------------------------------------------------------------------
-.. Copyright 2015 Nervana Systems Inc.
+.. Copyright 2015-2017 Nervana Systems Inc.
 .. Licensed under the Apache License, Version 2.0 (the "License");
 .. you may not use this file except in compliance with the License.
 .. You may obtain a copy of the License at
@@ -22,9 +22,8 @@ Nervana aeon
 
 aeon_ is Nervana_ ’s project to enable fast and flexible access to data when
 training your neon_ neural network models. You probably want to get started
-with :doc:`installation <getting_started>` then on to the `user guide 
-<user_guide>` followed by the more detailed :doc:`dataLoader <dataloader>` 
-documentation and `developer's guide <developer_guide>`.
+with :doc:`installation <getting_started>` then on to the `user guide
+<user_guide>` followed by the more detailed `developer's guide <developer_guide>`.
 
 This project is evolving quickly, so feel free to send us feature requests and
 bug reports at aeon_issues_ .
@@ -47,7 +46,7 @@ bug reports at aeon_issues_ .
 .. toctree::
    :hidden:
    :maxdepth: 0
-   :caption: Media
+   :caption: ETL Modules
 
    provider_image
    provider_label

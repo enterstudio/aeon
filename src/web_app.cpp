@@ -23,10 +23,9 @@
 #include "async_manager.hpp"
 #include "util.hpp"
 #include "base64.hpp"
+#include "loader.hpp"
 
 using namespace std;
-
-web_app debug_web_app{};
 
 void web_app::register_loader(nervana::loader* l)
 {
@@ -85,12 +84,12 @@ static string master_page = R"(
     </html>
 )";
 
-web_app::web_app()
+web_app::web_app(uint16_t port)
 {
     page_request_handler fn =
         bind(&web_app::process_page_request, this, placeholders::_1, placeholders::_2);
     web_server.register_page_handler(fn);
-    web_server.start(8086);
+    web_server.start(port);
 }
 
 web_app::~web_app()
@@ -156,10 +155,11 @@ void web_app::loader(web::page& p)
             out << "<div class=\"container\">";
             for (size_t i = 0; i < image_buffer.get_item_count(); i++)
             {
-                cv::Mat mat = image_buffer.get_item_as_mat(i);
+                cv::Mat         mat = image_buffer.get_item_as_mat(i);
                 vector<uint8_t> encoded;
                 imencode(".jpg", mat, encoded);
-                vector<char> b64 = nervana::base64::encode((const char*)encoded.data(), encoded.size());
+                vector<char> b64 =
+                    nervana::base64::encode((const char*)encoded.data(), encoded.size());
                 out << "\n<img src=\"data:image/jpg;base64,";
                 p.raw_send(b64.data(), b64.size());
                 out << "\" style=\"padding-top:5px\"";

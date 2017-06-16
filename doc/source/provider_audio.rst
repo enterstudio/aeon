@@ -24,22 +24,16 @@ For audio data, Aeon has providers for both classification and transcription tas
 
 This single line finds all ``*.wav`` files and converts them in-place and in parallel using sox.
 
-From there, the user should create a manifest file that specifies paths to both the audio and any target files. To provision just the audio data, the manifest would just list the audio files, one per line:
+From there, the user should create a manifest file that specifies paths to both the audio and any target files. To provision just the audio data, the manifest would just list the audio files, one per line::
 
-.. code-block:: bash
-
+    @FILE
     audio_sample_1.wav
     audio_sample_2.wav
     audio_sample_3.wav
 
 When the data is provisioned to the model, Aeon can output the raw waveform (``feature_type: samples``) or transform it into three different feature spaces: spectrograms (``feature_type: specgram``), mel-frequency spectral coefficients (``feature_type: mfsc``), or mel-frequency cepstral coefficients (``feature_type: mfcc``). The full provisioning pipeline is described below, along with some key parameters:
 
-.. image:: add_noise.png
-    :scale: 20 %
-    :align: center
-    :alt: "Additive noise"
-
-1. Probabilistically add noise to raw audio waveform (with the probability controlled by the ``add_noise_probability`` parameter). Noise is chosen from a random file in ``noise_index_file`` and added at a random offset and scaling (controlled by the ``noise_level`` parameter). If ``feature_type`` is "samples", then we can stop here.
+1.  Extract the samples corresponding to the raw audio waveform from the encoded file or buffer. If ``feature_type`` is "samples", then we can stop here.
 
 .. image:: spectrogram.png
     :scale: 20 %
@@ -73,7 +67,6 @@ The complete table of configuration parameters is shown below:
     max_duration (string)| *Required* | Maximum duration of any audio clip ("seconds" or "samples", e.g. "4 seconds")
     frame_stride (string)| *Required* | Interval between consecutive frames ("seconds" or "samples")
     frame_length (string)| *Required* | Duration of each frame ("seconds" or "samples")
-    name (string) | ~"~" | Name prepended to the output buffer name
     sample_freq_hz (uint32_t)| 16000 | Sample rate of input audio in hertz
     feature_type (string)| ~"specgram~" | Feature space to represent audio. One of "samples", "specgram", "mfsc", or "mfcc"
     window_type (string)| ~"hann~" | Window type for spectrogram generation. Currently supported windows are "hann", "hamming", "blackman", and "bartlett".
@@ -83,20 +76,24 @@ The complete table of configuration parameters is shown below:
     noise_level (tuple(float, float))| (0.0, 0.5) | How much noise to add (a value of 1 would be 0 dB SNR). Each clip applies its own value chosen randomly from with the given bounds.
     add_noise_probability (float)| 0.0 | Probability of adding noise
     time_scale_fraction (tuple(float, float))| (1.0, 1.0) | Scale factor for simple linear time-warping. Each clip applies its own value chosen randomly from with the given bounds.
+    emit_length (bool) | False | Produce a buffer indicating the length of the audio output buffer
     output_type (string)| ~"uint8_t~"| Output data type. If feature_type = "samples" then this should be "int16" or "float". Otherwise it should stay at "uint8_t".
 
-You can configure the audio processing pipeline from python using a dictionary like the following:
+You can configure the audio processing pipeline from python using a dictionary as follows:
 
 .. code-block:: python
 
-    audio_config = dict(sample_freq_hz=16000,
-                        max_duration="3 seconds",
-                        frame_length="256 samples",
-                        frame_stride="128 samples",
-                        window_type="hann",
-                        noise_index_file="/path/to/noise_index_file",
-                        add_noise_probability=0.5,
-                        noise_level=(0.5, 1.0))
+    audio_config = {"type": "audio",
+                    "sample_freq_hz": 16000,
+                    "max_duration": "3 seconds",
+                    "frame_length": "256 samples",
+                    "frame_stride": "128 samples",
+                    "noise_index_file": "/path/to/noise_index_file",
+                    "window_type": "hann"}
+
+    augmentation_config = {"type": "audio",
+                           "add_noise_probability": 0.5,
+                           "noise_level": (0.5, 1.0)}
 
 When providing audio only, the buffers provisioned to the model are:
 
@@ -106,7 +103,8 @@ When providing audio only, the buffers provisioned to the model are:
    :delim: |
    :escape: ~
 
-   audio | ``(F*T, N)`` | Transfomed audio, where ``F = number of bands``, ``T = max timepoints``, and ``N = bsz`` (the batch size).
+   audio | ``(N, F, T)`` | Transformed audio, where ``F = number of bands``, ``T = max timepoints``, and ``N = bsz`` (the batch size).
+   audio_length | ``(N)`` | Length of audio buffer in ``output_type`` units.  Only produced if ``emit_length`` is true in the configuration.
 
 .. _sox: http://sox.sourceforge.net/
 .. _neon: https://github.com/NervanaSystems/neon

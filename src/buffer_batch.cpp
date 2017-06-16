@@ -67,6 +67,7 @@ cv::Mat buffer_fixed_size_elements::get_item_as_mat(size_t index, bool channel_m
 
     if (channel_major)
     {
+        channels = sizes[0];
     }
     else
     {
@@ -75,14 +76,10 @@ cv::Mat buffer_fixed_size_elements::get_item_as_mat(size_t index, bool channel_m
         sizes.pop_back();
     }
 
-    // INFO << channels;
-    // INFO << ndims;
-    // INFO << join(sizes, ", ");
-
-    cv::Mat ret(
-        ndims,
-        &sizes[0], CV_MAKETYPE(m_shape_type.get_otype().get_cv_type(), channels),
-        (void*)&m_data[index * m_stride]);
+    cv::Mat ret(ndims,
+                &sizes[0],
+                CV_MAKETYPE(m_shape_type.get_otype().get_cv_type(), channels),
+                (void*)&m_data[index * m_stride]);
     return ret;
 }
 

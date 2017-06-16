@@ -1,4 +1,8 @@
 cmake_minimum_required (VERSION 2.8.11)
+
+# Set this flag before project definition to avoid using other compiler by gtest
+set(CMAKE_CXX_COMPILER "clang++")
+
 project (aeon)
 
 set(AEON_VERSION 1.0.0)
@@ -9,11 +13,20 @@ set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 # set directory where the custom finders live
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
-set(CMAKE_CXX_COMPILER "clang++")
-set(CMAKE_CXX_FLAGS "-O3 -std=c++11")
+option(COVERAGE "make code coverage" OFF)
+
+if(COVERAGE)
+  set(CMAKE_CXX_FLAGS "-O0 -g --coverage")
+  set(LCOVERAGE "--coverage")
+else(COVERAGE)
+  set(CMAKE_CXX_FLAGS "-O3")
+endif(COVERAGE)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror=return-type")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror=inconsistent-missing-override")
 
 # whitelist errors here
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Weverything")
@@ -30,6 +43,9 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-missing-prototypes")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-disabled-macro-expansion")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-pedantic")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-documentation")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-covered-switch-default")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-old-style-cast")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-warning-option")
 
 # should remove these
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-sign-conversion")
@@ -41,8 +57,12 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-duplicate-enum") # from numpy
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-used-but-marked-unused") # from sox
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-c++11-compat-deprecated-writable-strings")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-double-promotion")
 
 find_package(OpenCV REQUIRED)
+if(OpenCV_VERSION VERSION_LESS "2.4.8")
+  message(FATAL_ERROR "ERROR: Can't find OpenCV 2.4.8+")
+endif()
 include_directories(${OpenCV_INCLUDE_DIRS})
 
 # opecv_ts is for testing opencv. if it is left in the lib list then we get an error when
@@ -61,8 +81,8 @@ if (PYTHONLIBS_FOUND)
     if(NUMPY_FOUND)
         set(PYTHON_FOUND true)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPYTHON_FOUND")
-        include_directories(${PYTHON_INCLUDE_DIR})
-        include_directories(${NUMPY_INCLUDE_DIRS})
+        include_directories(SYSTEM ${PYTHON_INCLUDE_DIR})
+        include_directories(SYSTEM ${NUMPY_INCLUDE_DIRS})
     else()
         message("Numpy not found, Python interface not included")
     endif(NUMPY_FOUND)
@@ -73,9 +93,14 @@ endif (PYTHONLIBS_FOUND)
 
 set(TEST_DATA_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test/test_data)
 
+include_directories(BEFORE gtest/include)
+set(BUILD_SHARED_LIBS off)
+add_subdirectory(gtest)
+set(BUILD_SHARED_LIBS on)
 add_subdirectory(src)
 include_directories(src)
 add_subdirectory(test)
 add_subdirectory(examples)
 add_subdirectory(doc)
-
+include(clang-format.cmake)
+include(coverage.cmake)

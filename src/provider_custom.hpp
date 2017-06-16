@@ -29,7 +29,6 @@
 #include "etl_depthmap.hpp"
 #include "etl_label_map.hpp"
 #include "etl_localization.hpp"
-#include "etl_multicrop.hpp"
 #include "etl_pixel_mask.hpp"
 #include "etl_video.hpp"
 #include "augment_image.hpp"
@@ -170,6 +169,7 @@ private:
     nervana::audio::loader        m_loader;
     augment::audio::param_factory m_augmentation_factory;
     const std::string             m_buffer_name;
+    const std::string             m_length_name;
 };
 
 //=================================================================================================
@@ -315,6 +315,7 @@ private:
     nervana::char_map::extractor m_extractor;
     nervana::char_map::loader    m_loader;
     const std::string            m_buffer_name;
+    const std::string            m_length_name;
 };
 
 //=================================================================================================

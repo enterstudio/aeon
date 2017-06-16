@@ -1,5 +1,5 @@
 /*
- Copyright 2016 Nervana Systems Inc.
+ Copyright 2016-2017 Nervana Systems Inc.
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
  You may obtain a copy of the License at
@@ -38,7 +38,6 @@
 #include "etl_label.hpp"
 #include "etl_label_map.hpp"
 #include "etl_localization.hpp"
-#include "etl_multicrop.hpp"
 #include "etl_pixel_mask.hpp"
 #include "etl_video.hpp"
 #include "loader.hpp"
@@ -46,7 +45,7 @@
 using namespace std;
 using namespace nervana;
 
-template<typename T>
+template <typename T>
 static T setup(initializer_list<uint8_t> data)
 {
     T        rc;
@@ -82,7 +81,7 @@ TEST(util, unpack_le)
     //     EXPECT_EQ(0,actual);
     // }
     {
-        char data[] = {0, 0, 0, 1};
+        char data[] = {0, 0, 0, 1, 0};
         int  actual = unpack<int>(data, 1);
         EXPECT_EQ(0x00010000, actual);
     }
@@ -120,7 +119,7 @@ TEST(util, unpack_be)
         EXPECT_EQ(0x01000000, actual);
     }
     {
-        char data[] = {1, 0, 0, 0};
+        char data[] = {1, 0, 0, 0, 0};
         int  actual = unpack<int>(data, 1, endian::BIG);
         EXPECT_EQ(0, actual);
     }
@@ -130,7 +129,7 @@ TEST(util, pack_le)
 {
     {
         uint32_t actual;
-        auto expected = setup<uint32_t>({1, 0, 0, 0});
+        auto     expected = setup<uint32_t>({1, 0, 0, 0});
         pack<uint32_t>(&actual, 1);
         EXPECT_EQ(expected, actual);
     }
@@ -328,7 +327,6 @@ TEST(util, param_dump)
     DUMP_CONFIG(label);
     DUMP_CONFIG(label_map);
     DUMP_CONFIG(localization);
-    DUMP_CONFIG(multicrop);
     DUMP_CONFIG(video);
     {
         loader_config cfg;
