@@ -17,86 +17,15 @@
 
 #include "async_manager.hpp"
 #include "buffer_batch.hpp"
-#include "batch_iterator.hpp"
 #include "provider_interface.hpp"
 #include "provider_factory.hpp"
-#include "event.hpp"
+#include "thread_pool.hpp"
 
 namespace nervana
 {
     class batch_decoder;
-    class decode_thread_info;
+    class batch_iterator;
 }
-
-class nervana::decode_thread_info
-{
-public:
-    decode_thread_info(int                                        id,
-                       int                                        start,
-                       int                                        end,
-                       const std::shared_ptr<provider_interface>& prov,
-                       event&                                     done,
-                       std::atomic<size_t>&                       active)
-        : m_id{id}
-        , m_start_index{start}
-        , m_end_index{end}
-        , m_provider{provider_factory::clone(prov)}
-        , m_in_buf{nullptr}
-        , m_out_buf{nullptr}
-        , m_work_complete_event{done}
-        , m_active_count{active}
-        , m_thread_active{true}
-    {
-        m_thread = std::thread(&decode_thread_info::thread_entry, this);
-    }
-
-    void set_buffers(encoded_record_list* in, fixed_buffer_map* out)
-    {
-        m_in_buf  = in;
-        m_out_buf = out;
-        m_waiting_for_work_event.notify();
-    }
-
-    ~decode_thread_info()
-    {
-        m_thread_active = false;
-        m_waiting_for_work_event.notify();
-        m_thread.join();
-    }
-
-    const int                           m_id;
-    const int                           m_start_index;
-    const int                           m_end_index;
-    std::shared_ptr<provider_interface> m_provider;
-    encoded_record_list*                m_in_buf;
-    fixed_buffer_map*                   m_out_buf;
-    event                               m_waiting_for_work_event;
-    event&                              m_work_complete_event;
-    std::atomic<size_t>&                m_active_count;
-    bool                                m_thread_active;
-    std::thread                         m_thread;
-
-private:
-    void thread_entry()
-    {
-        while (m_thread_active)
-        {
-            m_waiting_for_work_event.wait();
-            if (m_thread_active)
-            {
-                for (int index = m_start_index; index < m_end_index; index++)
-                {
-                    m_provider->provide(index, *m_in_buf, *m_out_buf);
-                }
-                size_t count = m_active_count.fetch_sub(1);
-                if (count == 1) // last count is 1 means current count is 0
-                {
-                    m_work_complete_event.notify();
-                }
-            }
-        }
-    }
-};
 
 class nervana::batch_decoder : public async_manager<encoded_record_list, fixed_buffer_map>
 {
@@ -118,15 +47,14 @@ public:
         m_info_handler = f;
     }
 
+    void process(const int index) { m_provider->provide(index, *m_inputs, *m_outputs); }
 private:
-    size_t m_batch_size;
-    size_t m_number_elements_in;
-    size_t m_number_elements_out;
-    int    m_items_per_thread;
-
+    size_t                              m_batch_size;
+    size_t                              m_number_elements_in;
+    size_t                              m_number_elements_out;
+    std::shared_ptr<provider_interface> m_provider;
+    encoded_record_list*                m_inputs{nullptr};
+    fixed_buffer_map*                   m_outputs{nullptr};
+    thread_pool<batch_decoder, &batch_decoder::process> m_thread_pool;
     std::function<void(const fixed_buffer_map*)> m_info_handler;
-
-    std::vector<std::shared_ptr<decode_thread_info>> m_decode_thread_info;
-    event                                            m_work_complete_event;
-    std::atomic<size_t>                              m_active_count;
 };

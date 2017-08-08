@@ -13,9 +13,11 @@
  limitations under the License.
 */
 
-#include <iomanip>
-#include <fstream>
 #include <exception>
+#include <fstream>
+#include <iomanip>
+#include <numeric>
+#include <random>
 
 #include "block_manager.hpp"
 #include "file_util.hpp"
@@ -91,6 +93,10 @@ nervana::encoded_record_list* block_manager::filler()
             if (f)
             {
                 cpio::reader reader(f);
+
+                if (reader.record_count() == 0)
+                    throw runtime_error("block manager: cache file corrupted");
+
                 for (size_t record_number = 0; record_number < reader.record_count();
                      record_number++)
                 {
@@ -99,9 +105,14 @@ nervana::encoded_record_list* block_manager::filler()
                     {
                         vector<char> e;
                         reader.read(e);
-                        record.add_element(e);
+                        record.add_element(std::move(e));
                     }
                     rc->add_record(record);
+                }
+                if (m_shuffle_enabled)
+                {
+                    std::random_device rd;
+                    rc->shuffle(rd());
                 }
             }
         }

@@ -1,23 +1,23 @@
-// /*
-//  Copyright 2016 Nervana Systems Inc.
-//  Licensed under the Apache License, Version 2.0 (the "License");
-//  you may not use this file except in compliance with the License.
-//  You may obtain a copy of the License at
+/*
+ Copyright 2017 Nervana Systems Inc.
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
 
-//       http://www.apache.org/licenses/LICENSE-2.0
+      http://www.apache.org/licenses/LICENSE-2.0
 
-//  Unless required by applicable law or agreed to in writing, software
-//  distributed under the License is distributed on an "AS IS" BASIS,
-//  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-//  See the License for the specific language governing permissions and
-//  limitations under the License.
-// */
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+*/
 
 #include <iostream>
 #include <sstream>
-// #include <memory>
 
 #include "api.hpp"
+#include "json_parser.hpp"
 #include <numpy/arrayobject.h>
 #include "structmember.h"
 using namespace nervana;
@@ -59,6 +59,22 @@ static PyObject* error_out(PyObject* m)
     return NULL;
 }
 
+/*
+ * This method dums dictionary to a json string
+ */
+static PyObject* dict2json(PyObject* self, PyObject* dictionary)
+{
+    try
+    {
+        return PyBytes_FromString(JsonParser().parse(dictionary).dump().c_str());
+    }
+    catch (std::exception& e)
+    {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
+}
+
 static PyObject* wrap_buffer_as_np_array(const buffer_fixed_size_elements* buf);
 
 typedef struct
@@ -66,12 +82,16 @@ typedef struct
     PyObject_HEAD PyObject* ndata;
     PyObject*               batch_size;
     PyObject*               axes_info;
+    PyObject*               config;
     loader*                 m_loader;
     uint32_t                m_i;
+    bool                    m_first_iteration;
 } aeon_DataLoader;
 
-static PyMethodDef aeon_methods[] = {{"error_out", (PyCFunction)error_out, METH_NOARGS, NULL},
-                                     {NULL, NULL, NULL, NULL}};
+static PyMethodDef aeon_methods[] = {
+    {"error_out", (PyCFunction)error_out, METH_NOARGS, NULL},
+    {"dict2json", (PyCFunction)dict2json, METH_O, "Dump dict to json string"},
+    {NULL, NULL, NULL, NULL}};
 
 static PyObject* DataLoader_iter(PyObject* self)
 {
@@ -80,6 +100,7 @@ static PyObject* DataLoader_iter(PyObject* self)
 #endif
     Py_INCREF(self);
     DL_get_loader(self)->reset();
+    ((aeon_DataLoader*)(self))->m_first_iteration = true;
     return self;
 }
 
@@ -89,6 +110,12 @@ static PyObject* DataLoader_iternext(PyObject* self)
     INFO << " aeon_DataLoader_iternext";
 #endif
     PyObject* result = NULL;
+
+    if (!((aeon_DataLoader*)(self))->m_first_iteration)
+        DL_get_loader(self)->get_current_iter()++;
+    else
+        ((aeon_DataLoader*)(self))->m_first_iteration = false;
+
     if (DL_get_loader(self)->get_current_iter() != DL_get_loader(self)->get_end_iter())
     {
         // d will be const fixed_buffer_map&
@@ -110,7 +137,6 @@ static PyObject* DataLoader_iternext(PyObject* self)
                 PyErr_SetString(PyExc_RuntimeError, "Error building shape dict");
             }
         }
-        DL_get_loader(self)->get_current_iter()++;
     }
     else
     {
@@ -140,34 +166,6 @@ static PySequenceMethods DataLoader_sequence_methods = {aeon_DataLoader_length, 
                                                         0, /* sq_inplace_repeat */
                                                         0 /* sq_inplace_repeat */};
 
-/* This function handles py2 and py3 independent unpacking of string object (bytes or unicode)
- * as an ascii std::string
- */
-static std::string py23_string_to_string(PyObject* py_str)
-{
-    PyObject*         s = NULL;
-    std::stringstream ss;
-
-    if (PyUnicode_Check(py_str))
-    {
-        s = PyUnicode_AsUTF8String(py_str);
-    }
-    else if (PyBytes_Check(py_str))
-    {
-        s = PyObject_Bytes(py_str);
-    }
-    else
-    {
-        PyErr_SetString(PyExc_RuntimeError, "Unexpected key type");
-    }
-
-    if (s != NULL)
-    {
-        ss << PyBytes_AsString(s);
-        Py_XDECREF(s);
-    }
-    return ss.str();
-}
 
 static PyObject* wrap_buffer_as_np_array(const buffer_fixed_size_elements* buf)
 {
@@ -202,6 +200,7 @@ static void DataLoader_dealloc(aeon_DataLoader* self)
     Py_XDECREF(self->ndata);
     Py_XDECREF(self->batch_size);
     Py_XDECREF(self->axes_info);
+    Py_XDECREF(self->config);
     Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
@@ -215,12 +214,24 @@ static PyObject* DataLoader_new(PyTypeObject* type, PyObject* args, PyObject* kw
     static const char* keyword_list[] = {"config", nullptr};
 
     PyObject* dict;
-    auto rc = PyArg_ParseTupleAndKeywords(args, kwds, "O", const_cast<char**>(keyword_list), &dict);
+    auto      rc = PyArg_ParseTupleAndKeywords(
+        args, kwds, "O!", const_cast<char**>(keyword_list), &PyDict_Type, &dict);
 
     if (rc)
     {
-        std::string dict_string = py23_string_to_string(dict);
-        nlohmann::json json_config = nlohmann::json::parse(dict_string);
+        nlohmann::json json_config;
+        try
+        {
+            json_config = JsonParser().parse(dict);
+        }
+        catch (const std::exception& e)
+        {
+            std::stringstream ss;
+            ss << "Unable to parse config: " << e.what();
+            ERR << ss.str();
+            PyErr_SetString(PyExc_RuntimeError, ss.str().c_str());
+            return NULL;
+        }
 #ifdef AEON_DEBUG
         INFO << " config " << json_config.dump(4);
 #endif
@@ -232,11 +243,13 @@ static PyObject* DataLoader_new(PyTypeObject* type, PyObject* args, PyObject* kw
 
         try
         {
-            self->m_loader   = new loader(json_config);
-            self->m_i        = 0;
-            self->ndata      = Py_BuildValue("i", self->m_loader->record_count());
-            self->batch_size = Py_BuildValue("i", self->m_loader->batch_size());
-            self->axes_info  = PyDict_New();
+            self->m_loader          = new loader(json_config);
+            self->m_i               = 0;
+            self->m_first_iteration = true;
+            self->ndata             = Py_BuildValue("i", self->m_loader->record_count());
+            self->batch_size        = Py_BuildValue("i", self->m_loader->batch_size());
+            self->axes_info         = PyDict_New();
+            self->config            = PyDict_Copy(dict);
 
             auto name_shape_list = self->m_loader->get_names_and_shapes();
 
@@ -272,7 +285,8 @@ static PyObject* DataLoader_new(PyTypeObject* type, PyObject* args, PyObject* kw
             // Some kind of problem with creating the internal loader object
             ERR << "Unable to create internal loader object";
             std::stringstream ss;
-            ss << "Unable to create internal loader object: " << e.what();
+            ss << "Unable to create internal loader object: " << e.what() << endl;
+            ss << "config is: " << json_config << endl;
             PyErr_SetString(PyExc_RuntimeError, ss.str().c_str());
             return NULL;
         }
@@ -303,9 +317,26 @@ static PyMethodDef DataLoader_methods[] = {
 };
 
 static PyMemberDef DataLoader_members[] = {
-    {(char*)"ndata", T_OBJECT_EX, offsetof(aeon_DataLoader, ndata), 0, (char*)"number of records in dataset"},
-    {(char*)"batch_size", T_OBJECT_EX, offsetof(aeon_DataLoader, batch_size), 0, (char*)"mini-batch size"},
-    {(char*)"axes_info", T_OBJECT_EX, offsetof(aeon_DataLoader, axes_info), 0, (char*)"axes names and lengths"},
+    {(char*)"ndata",
+     T_OBJECT_EX,
+     offsetof(aeon_DataLoader, ndata),
+     0,
+     (char*)"number of records in dataset"},
+    {(char*)"batch_size",
+     T_OBJECT_EX,
+     offsetof(aeon_DataLoader, batch_size),
+     0,
+     (char*)"batch size"},
+    {(char*)"axes_info",
+     T_OBJECT_EX,
+     offsetof(aeon_DataLoader, axes_info),
+     0,
+     (char*)"axes names and lengths"},
+    {(char*)"config",
+     T_OBJECT_EX,
+     offsetof(aeon_DataLoader, config),
+     0,
+     (char*)"config passed to DataLoader object"},
     {NULL, NULL, 0, 0, NULL} /* Sentinel */
 };
 

@@ -16,12 +16,13 @@
 #include <sys/stat.h>
 
 #include <algorithm>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <iterator>
-#include <fstream>
-#include <string>
+#include <numeric>
 #include <sstream>
-#include <iomanip>
+#include <string>
 
 #include "manifest_file.hpp"
 #include "util.hpp"
@@ -159,12 +160,10 @@ void manifest_file::initialize(std::istream&      stream,
             vector<string> element_list = split(line, m_delimiter_char);
             if (m_element_types.empty())
             {
-                // No element type metadata found so create defaults
-                for (int i = 0; i < element_list.size(); i++)
-                {
-                    m_element_types.push_back(element_t::FILE);
-                }
-                element_count = element_list.size();
+                ostringstream ss;
+                ss << "metadata must be defined before any data at line " << line_number;
+                ERR << ss.str();
+                throw std::invalid_argument(ss.str());
             }
 
             if (element_list.size() != element_count)
