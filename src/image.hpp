@@ -26,6 +26,7 @@ namespace nervana
     {
         // These functions may be common across different transformers
         void resize(const cv::Mat&, cv::Mat&, const cv::Size2i&, bool interpolate = true);
+        void expand(const cv::Mat& input, cv::Mat& output, cv::Size offset, cv::Size size);
         void rotate(const cv::Mat&    input,
                     cv::Mat&          output,
                     int               angle,
@@ -34,6 +35,8 @@ namespace nervana
         void convert_mix_channels(std::vector<cv::Mat>& source,
                                   std::vector<cv::Mat>& target,
                                   std::vector<int>&     from_to);
+
+        void add_padding(cv::Mat& input, int padding, cv::Size2i crop_offset);
 
         float calculate_scale(const cv::Size& size, int output_width, int output_height);
 

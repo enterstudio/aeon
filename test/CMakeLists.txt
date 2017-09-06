@@ -23,7 +23,8 @@ set (SRC
     test_image.cpp
     test_label_map.cpp
     test_loader.cpp
-    test_localization.cpp
+    test_localization_rcnn.cpp
+    test_localization_ssd.cpp
     test_logging.cpp
     test_manifest_csv.cpp
     test_params.cpp
@@ -38,10 +39,10 @@ set (SRC
 )
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCURDIR=\\\"${CMAKE_CURRENT_SOURCE_DIR}\\\"")
 
-add_executable(test ${SRC})
-target_link_libraries(test aeon pthread sox ${CURL_LIBRARIES} gtest ${LCOVERAGE} ${OpenCV_LIBRARIES} ${PYTHON_LIBRARIES})
-add_dependencies(test aeon)
+add_executable(testsuite ${SRC})
+target_link_libraries(testsuite aeon pthread sox ${CURL_LIBRARIES} gtest ${LCOVERAGE} ${OpenCV_LIBRARIES} ${PYTHON_LIBRARIES})
+add_dependencies(testsuite aeon)
 
 add_custom_target(runtest
-	COMMAND ${PROJECT_BINARY_DIR}/test/test
-	DEPENDS test)
+	COMMAND ${PROJECT_BINARY_DIR}/test/testsuite
+	DEPENDS testsuite)

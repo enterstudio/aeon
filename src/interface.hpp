@@ -22,9 +22,7 @@
 #include <exception>
 #include <string>
 #include <sstream>
-#ifndef _MSC_VER
 #include <cxxabi.h>
-#endif
 
 #include "typemap.hpp"
 #include "util.hpp"
@@ -67,6 +65,7 @@ namespace nervana
     std::string dump_default(const std::uniform_int_distribution<int>& v);
     std::string dump_default(const std::normal_distribution<float>& v);
     std::string dump_default(const std::bernoulli_distribution& v);
+    std::string dump_default(nlohmann::json v);
     std::string dump_default(std::vector<nlohmann::json> v);
 }
 
@@ -94,21 +93,26 @@ public:
         REQUIRED
     };
 
-#define ADD_SCALAR(var, mode, ...)                                                                 \
+#define ADD_SCALAR(var, mode, ...) ADD_SCALAR_WITH_KEY(var, #var, mode, ##__VA_ARGS__)
+#define ADD_SCALAR_WITH_KEY(var, key, mode, ...)                                                   \
     std::make_shared<nervana::interface::config_info<decltype(var)>>(                              \
-        var, #var, mode, parse_value<decltype(var)>, ##__VA_ARGS__)
+        var, key, mode, parse_value<decltype(var)>, ##__VA_ARGS__)
 #define ADD_IGNORE(var)                                                                            \
     std::make_shared<nervana::interface::config_info<int>>(                                        \
         IGNORE_VALUE,                                                                              \
         #var,                                                                                      \
         mode::OPTIONAL,                                                                            \
         [](int, const std::string&, const nlohmann::json&, mode) {})
-#define ADD_DISTRIBUTION(var, mode, ...)                                                           \
+#define ADD_DISTRIBUTION(var, mode, ...) ADD_DISTRIBUTION_WITH_KEY(var, #var, mode, ##__VA_ARGS__)
+#define ADD_DISTRIBUTION_WITH_KEY(var, key, mode, ...)                                             \
     std::make_shared<nervana::interface::config_info<decltype(var)>>(                              \
-        var, #var, mode, parse_dist<decltype(var)>, ##__VA_ARGS__)
+        var, key, mode, parse_dist<decltype(var)>, ##__VA_ARGS__)
 #define ADD_OBJECT(var, mode, ...)                                                                 \
     std::make_shared<nervana::interface::config_info<decltype(var)>>(                              \
         var, #var, mode, parse_object<decltype(var)>, ##__VA_ARGS__)
+#define ADD_JSON(var, key, mode, ...)                                                              \
+    std::make_shared<nervana::interface::config_info<decltype(var)>>(                              \
+        var, key, mode, parse_json<decltype(var)>, ##__VA_ARGS__)
 
     template <typename T, typename S>
     static void set_dist_params(T& dist, S& params)
@@ -146,6 +150,23 @@ public:
         if (val != js.end())
         {
             value = val->get<T>();
+        }
+        else if (required == mode::REQUIRED)
+        {
+            throw std::invalid_argument("Required Argument: '" + key + "' not set");
+        }
+    }
+
+    template <typename T>
+    static void parse_json(T&                    value,
+                           const std::string&    key,
+                           const nlohmann::json& js,
+                           mode                  required = mode::OPTIONAL)
+    {
+        auto val = js.find(key);
+        if (val != js.end())
+        {
+            value = val.value();
         }
         else if (required == mode::REQUIRED)
         {
@@ -206,14 +227,12 @@ public:
         return m_shape_type_list;
     }
 
-    void add_shape_type(const std::vector<size_t>& shape_,
-                        const std::string&         output_type_)
+    void add_shape_type(const std::vector<size_t>& shape_, const std::string& output_type_)
     {
         m_shape_type_list.emplace_back(shape_, nervana::output_type{output_type_});
     }
 
-    void add_shape_type(const std::vector<size_t>&  shape_,
-                        const nervana::output_type& output_type_)
+    void add_shape_type(const std::vector<size_t>& shape_, const nervana::output_type& output_type_)
     {
         m_shape_type_list.emplace_back(shape_, output_type_);
     }
@@ -232,27 +251,30 @@ private:
 
 namespace nervana
 {
-    template <class T>
+    template <class Type>
     std::string type_name()
     {
-        typedef typename std::remove_reference<T>::type TR;
-        std::unique_ptr<char, void (*)(void*)> own(
-#ifndef _MSC_VER
-            abi::__cxa_demangle(typeid(TR).name(), nullptr, nullptr, nullptr),
-#else
-            nullptr,
-#endif
-            std::free);
-        std::string r = own != nullptr ? own.get() : typeid(TR).name();
-        if (std::is_const<TR>::value)
-            r += " const";
-        if (std::is_volatile<TR>::value)
-            r += " volatile";
-        if (std::is_lvalue_reference<T>::value)
-            r += "&";
-        else if (std::is_rvalue_reference<T>::value)
-            r += "&&";
-        return r;
+        std::string name;
+
+        typedef typename std::remove_reference<Type>::type NonReferenceType;
+        if (std::is_const<NonReferenceType>::value)
+            name = "const ";
+        if (std::is_volatile<NonReferenceType>::value)
+            name += "volatile ";
+
+        char* buffer = abi::__cxa_demangle(typeid(Type).name(), nullptr, nullptr, nullptr);
+        if (buffer != nullptr)
+        {
+            name += buffer;
+            free(buffer);
+        }
+
+        if (std::is_lvalue_reference<Type>::value)
+            name += "&";
+        else if (std::is_rvalue_reference<Type>::value)
+            name += "&&";
+
+        return name;
     }
 }
 
@@ -287,7 +309,7 @@ public:
         {
             m_parse_function(m_target_variable, m_variable_name, js, m_parse_mode);
         }
-        catch(const std::exception& ex)
+        catch (const std::exception& ex)
         {
             std::stringstream ss;
             ss << "error when parsing field \"" << m_variable_name << "\": " << ex.what();
@@ -326,7 +348,7 @@ class nervana::interface::extractor
 {
 public:
     virtual ~extractor() {}
-    virtual std::shared_ptr<T> extract(const void*, size_t) = 0;
+    virtual std::shared_ptr<T> extract(const void*, size_t) const = 0;
 };
 
 template <typename T, typename S>
@@ -334,7 +356,7 @@ class nervana::interface::transformer
 {
 public:
     virtual ~transformer() {}
-    virtual std::shared_ptr<T> transform(std::shared_ptr<S>, std::shared_ptr<T>) = 0;
+    virtual std::shared_ptr<T> transform(std::shared_ptr<S>, std::shared_ptr<T>) const = 0;
 };
 
 template <typename T>
@@ -342,7 +364,7 @@ class nervana::interface::loader
 {
 public:
     virtual ~loader() {}
-    virtual void load(const std::vector<void*>&, std::shared_ptr<T>) = 0;
+    virtual void load(const std::vector<void*>&, std::shared_ptr<T>) const = 0;
 };
 
 /*  ABSTRACT INTERFACES */
