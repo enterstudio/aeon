@@ -39,6 +39,13 @@ const string manifest_file::m_string_type_id      = "STRING";
 const string manifest_file::m_ascii_int_type_id   = "ASCII_INT";
 const string manifest_file::m_ascii_float_type_id = "ASCII_FLOAT";
 
+namespace errors
+{
+    const string no_header =
+        "Metadata must be defined before any data. Potentially old manifest format used. Read "
+        "neon doc/source/loading_data.rst#aeon-dataloader for more information.";
+}
+
 manifest_file::manifest_file(const string& filename,
                              bool          shuffle,
                              const string& root,
@@ -47,7 +54,7 @@ manifest_file::manifest_file(const string& filename,
     : m_source_filename(filename)
     , m_record_count{0}
     , m_shuffle{shuffle}
-    , m_rnd{0}//get_global_random_seed()}
+    , m_rnd{0} //get_global_random_seed()}
 {
     // for now parse the entire manifest on creation
     ifstream infile(m_source_filename);
@@ -67,7 +74,7 @@ manifest_file::manifest_file(std::istream&      stream,
                              size_t             block_size)
     : m_record_count{0}
     , m_shuffle{shuffle}
-    , m_rnd{0}//get_global_random_seed()}
+    , m_rnd{0} //get_global_random_seed()}
 {
     initialize(stream, block_size, root, subset_fraction);
 }
@@ -98,7 +105,6 @@ void manifest_file::initialize(std::istream&      stream,
     size_t                 line_number   = 0;
     string                 line;
     vector<vector<string>> record_list;
-    
 
     // read in each line, then from that istringstream, break into
     // tab-separated elements.
@@ -113,11 +119,8 @@ void manifest_file::initialize(std::istream&      stream,
             line = line.substr(1);
             if (m_element_types.empty() == false)
             {
-                // Already have element types so this is an error
                 // Element types must be defined before any data
-                ostringstream ss;
-                ss << "metadata must be defined before any data at line " << line_number;
-                throw std::invalid_argument(ss.str());
+                throw std::invalid_argument(errors::no_header);
             }
             vector<string> element_list = split(line, m_delimiter_char);
             for (const string& type : element_list)
@@ -161,10 +164,7 @@ void manifest_file::initialize(std::istream&      stream,
             vector<string> element_list = split(line, m_delimiter_char);
             if (m_element_types.empty())
             {
-                ostringstream ss;
-                ss << "metadata must be defined before any data at line " << line_number;
-                ERR << ss.str();
-                throw std::invalid_argument(ss.str());
+                throw std::invalid_argument(errors::no_header);
             }
 
             if (element_list.size() != element_count)
@@ -203,7 +203,8 @@ void manifest_file::initialize(std::istream&      stream,
     m_crc_engine.TruncatedFinal((uint8_t*)&m_computed_crc, sizeof(m_computed_crc));
 
     if (m_shuffle)
-        std::shuffle(record_list.begin(), record_list.end(), std::mt19937(get_global_random_seed()));
+        std::shuffle(
+            record_list.begin(), record_list.end(), std::mt19937(get_global_random_seed()));
 
     if (!root.empty())
     {
@@ -268,7 +269,7 @@ void manifest_file::generate_subset(vector<vector<string>>& record_list, float s
     if (subset_fraction < 1.0)
     {
         std::bernoulli_distribution distribution(subset_fraction);
-        std::default_random_engine  generator(0);//get_global_random_seed());
+        std::default_random_engine  generator(0); //get_global_random_seed());
         vector<record>              tmp;
         tmp.swap(record_list);
         size_t expected_count = tmp.size() * subset_fraction;
